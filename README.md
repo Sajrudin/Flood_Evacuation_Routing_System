@@ -56,20 +56,21 @@ It removes flood-prone roads from the network and computes evacuation routes dyn
 ## Project Structure
 FLOOD_EVACUATION_SYSTEM/
 
-├── 1_raw_data/ # Input datasets
+├── 1_raw_data/
 │
-├── 3_outputs/ # Processed outputs
-│ ├── flood_risk.tif
-│ ├── unsafe_roads.geojson
-│ ├── roads_dehradun_safe.graphml
-│ ├── evacuation_map.html
-│ └── evacuation_route.geojson
+├── 3_outputs/
+│   ├── flood_risk.tif
+│   ├── unsafe_roads.geojson
+│   ├── roads_dehradun_safe.graphml
+│   ├── evacuation_map.html
+│   └── evacuation_route.geojson
 │
 ├── 4_scripts/
-│ └── python/
-│ ├── preprocess.py
-│ ├── road_osm.py
-│ ├── api.py
-│ └── map.html
+│   └── python/
+│       ├── preprocess.py
+│       ├── road_osm.py
+│       ├── api.py
+│       └── map.html
 │
 └── README.md
+
