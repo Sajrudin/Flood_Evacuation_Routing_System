@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Flood Evacuation Demo</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial;
+      }
+      #map {
+        height: 100vh;
+        cursor: crosshair;
+      }
+
+      .panel {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: white;
+        padding: 12px;
+        z-index: 1000;
+        width: 260px;
+        border-radius: 6px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+      }
+
+      .panel h3 {
+        margin: 0 0 8px 0;
+      }
+      .panel button {
+        width: 100%;
+        margin-top: 6px;
+        padding: 6px;
+      }
+
+      .info {
+        margin-top: 8px;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="panel">
+      <h3>Flood Evacuation Demo</h3>
+      <div id="status"><b>Click on map to select SOURCE</b></div>
+
+      <button onclick="findRoute()">Find Safe Route</button>
+      <button onclick="resetMap()">Reset</button>
+
+      <div class="info" id="info"></div>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+      const map = L.map("map").setView([30.32, 78.03], 11);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(
+        map
+      );
+
+      let src = null,
+        dst = null;
+      let routeLayer = null;
+
+      // Unsafe roads layer
+      fetch("S:/Work/Flood_Evacuation_System/3_outputs/unsafe_roads.geojson")
+        .then((r) => r.json())
+        .then((data) => {
+          L.geoJSON(data, {
+            style: { color: "gray", weight: 1, opacity: 0.4 },
+          }).addTo(map);
+        });
+
+      map.on("click", function (e) {
+        if (!src) {
+          src = e.latlng;
+          L.marker(src, { draggable: true })
+            .addTo(map)
+            .bindPopup("Source")
+            .openPopup();
+          document.getElementById("status").innerHTML =
+            "<b>Now click to select DESTINATION</b>";
+        } else if (!dst) {
+          dst = e.latlng;
+          L.marker(dst, { draggable: true })
+            .addTo(map)
+            .bindPopup("Destination")
+            .openPopup();
+          document.getElementById("status").innerHTML =
+            "<b>Click Find Safe Route</b>";
+        }
+      });
+
+      function findRoute() {
+        if (!src || !dst) {
+          alert("Select source and destination first");
+          return;
+        }
+
+        fetch("http://127.0.0.1:5000/route", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source: [src.lat, src.lng],
+            destination: [dst.lat, dst.lng],
+          }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (routeLayer) map.removeLayer(routeLayer);
+
+            routeLayer = L.geoJSON(data, {
+              style: {
+                color: "#ff0000",
+                weight: 6,
+                opacity: 1,
+              },
+            }).addTo(map);
+
+            // Force route to top and zoom to it
+            routeLayer.bringToFront();
+            map.fitBounds(routeLayer.getBounds());
+
+            document.getElementById("info").innerHTML =
+              "📏 Distance: <b>" +
+              data.properties.distance_km +
+              " km</b><br>" +
+              "⚠️ Avoided <b>" +
+              data.properties.avoided_unsafe +
+              "</b> unsafe road segments";
+          });
+      }
+
+      function resetMap() {
+        location.reload();
+      }
+    </script>
+  </body>
+</html>
