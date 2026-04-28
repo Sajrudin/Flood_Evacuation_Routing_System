@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Flood Evacuation Route Planner</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <!-- Geocoder -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css"/>
+  <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet"/>
+
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+
+<body>
+
+<!-- ───────────── TOPBAR ───────────── -->
+<header id="topbar">
+  <div class="brand">
+    <div class="brand-icon">🏠</div>
+    <span class="brand-title">Flood Evacuation Route Planner</span>
+  </div>
+
+  <div class="live-badge">
+    <div class="live-dot"></div>
+    <span>Live Updates: ON</span>
+  </div>
+
+  <button class="nav-btn" onclick="resetMap()">↺</button>
+  <button class="nav-btn" onclick="showHelp()">?</button>
+</header>
+
+<!-- ───────────── LAYOUT ───────────── -->
+<div id="layout">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+
+    <div class="section-head">Route Planner</div>
+
+    <div class="planner-card">
+      <h3>🗺️ Route Planner</h3>
+
+      <div class="input-group">
+        <label>Source Location</label>
+        <div class="input-wrap">
+          <div class="input-icon">📍</div>
+          <input type="text" id="srcInput" placeholder="Search or click on map" oninput="onInput('src')"/>
+          <button class="clear-btn hidden" id="srcClear" onclick="clearPoint('src')">✕</button>
+        </div>
+      </div>
+
+      <div id="srcResults" class="autocomplete-list"></div>
+
+      <div class="input-group">
+        <label>Destination Location</label>
+        <div class="input-wrap">
+          <div class="input-icon">📍</div>
+          <input type="text" id="dstInput" placeholder="Search or click on map" oninput="onInput('dst')"/>
+          <button class="clear-btn hidden" id="dstClear" onclick="clearPoint('dst')">✕</button>
+        </div>
+      </div>
+
+      <div id="dstResults" class="autocomplete-list"></div>
+
+      <label class="filter-label">Travel Mode</label>
+      <select id="travelMode" class="mode-select">
+        <option value="road">🚗 By Road</option>
+        <option value="walk">🚶 On Foot</option>
+        <option value="bike">🚲 By Bicycle</option>
+      </select>
+
+      <button id="routeBtn" class="btn-route" onclick="findRoute()">
+        Find Safe Route
+      </button>
+    </div>
+
+    <!-- STATUS -->
+    <div id="statusMsg" class="status-msg"></div>
+
+    <!-- RISK SETTINGS -->
+    <div class="risk-card">
+      <h4>⚙️ Risk Filter Settings</h4>
+
+      <label>Risk Threshold: <span id="threshVal">0.65</span></label>
+      <input type="range" id="riskThresh" min="0" max="1" step="0.01" value="0.65"
+             oninput="threshVal.textContent=parseFloat(this.value).toFixed(2)"/>
+
+      <label>Route Preference</label>
+      <select id="routePref" class="pref-select">
+        <option value="safer">Safer Route</option>
+        <option value="shorter">Shorter Route</option>
+        <option value="balanced">Balanced</option>
+      </select>
+    </div>
+
+    <!-- SUMMARY -->
+    <div class="summary-card">
+      <h4>📊 Route Summary</h4>
+
+      <p>Distance: <span id="sumDist">—</span></p>
+      <p>Time: <span id="sumTime">—</span></p>
+      <p>Unsafe Segments: <span id="sumUnsafe">—</span></p>
+    </div>
+
+  </aside>
+
+  <!-- MAP -->
+  <div id="map"></div>
+
+</div>
+
+<!-- LEGEND -->
+<div id="legend">
+  <h5>Risk Level</h5>
+  <div>🟢 Safe</div>
+  <div>🟡 Low</div>
+  <div>🟠 Medium</div>
+  <div>🔴 High</div>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>

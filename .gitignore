@@ -1,0 +1,20 @@
+# Python cache
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Environment
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Large outputs (safe to ignore)
+outputs/rasters/*
+outputs/maps/*.html
+
+
+
+# Optional (only if very large raw data)
+# data/raw/*
