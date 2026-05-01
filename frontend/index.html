@@ -1,27 +1,27 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Flood Evacuation Route Planner</title>
 
   <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
   <!-- Geocoder -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
   <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet"/>
 
-  <link rel="stylesheet" href="/static/css/styles.css">
+  <link rel="stylesheet" href="/static/css/styles.css" />
 </head>
 
 <body>
 
-<!-- ───────────── TOPBAR ───────────── -->
+<!-- TOPBAR -->
 <header id="topbar">
   <div class="brand">
     <div class="brand-icon">🏠</div>
@@ -37,7 +37,7 @@
   <button class="nav-btn" onclick="showHelp()">?</button>
 </header>
 
-<!-- ───────────── LAYOUT ───────────── -->
+<!-- LAYOUT -->
 <div id="layout">
 
   <!-- SIDEBAR -->
@@ -48,6 +48,7 @@
     <div class="planner-card">
       <h3>🗺️ Route Planner</h3>
 
+      <!-- SOURCE -->
       <div class="input-group">
         <label>Source Location</label>
         <div class="input-wrap">
@@ -59,6 +60,7 @@
 
       <div id="srcResults" class="autocomplete-list"></div>
 
+      <!-- DESTINATION -->
       <div class="input-group">
         <label>Destination Location</label>
         <div class="input-wrap">
@@ -70,35 +72,23 @@
 
       <div id="dstResults" class="autocomplete-list"></div>
 
-      <label class="filter-label">Travel Mode</label>
-      <select id="travelMode" class="mode-select">
-        <option value="road">🚗 By Road</option>
-        <option value="walk">🚶 On Foot</option>
-        <option value="bike">🚲 By Bicycle</option>
-      </select>
-
+      <!-- ROUTE BUTTON -->
       <button id="routeBtn" class="btn-route" onclick="findRoute()">
-        Find Safe Route
+        Find Routes
       </button>
     </div>
 
     <!-- STATUS -->
     <div id="statusMsg" class="status-msg"></div>
 
-    <!-- RISK SETTINGS -->
+    <!-- ROUTE TYPE CONTROLS -->
     <div class="risk-card">
-      <h4>⚙️ Risk Filter Settings</h4>
+      <h4>🧭 Route Types</h4>
 
-      <label>Risk Threshold: <span id="threshVal">0.65</span></label>
-      <input type="range" id="riskThresh" min="0" max="1" step="0.01" value="0.65"
-             oninput="threshVal.textContent=parseFloat(this.value).toFixed(2)"/>
-
-      <label>Route Preference</label>
-      <select id="routePref" class="pref-select">
-        <option value="safer">Safer Route</option>
-        <option value="shorter">Shorter Route</option>
-        <option value="balanced">Balanced</option>
-      </select>
+      <button onclick="toggleRoute('shortest')">🔵 Shortest</button>
+      <button onclick="toggleRoute('safe')">🟢 Safe</button>
+      <button onclick="toggleRoute('balanced')">🟠 Balanced</button>
+      <button onclick="toggleRoute('unsafe')">🔴 Unsafe</button>
     </div>
 
     <!-- SUMMARY -->
@@ -119,13 +109,14 @@
 
 <!-- LEGEND -->
 <div id="legend">
-  <h5>Risk Level</h5>
+  <h5>Route Colors</h5>
+  <div>🔵 Shortest</div>
   <div>🟢 Safe</div>
-  <div>🟡 Low</div>
-  <div>🟠 Medium</div>
-  <div>🔴 High</div>
+  <div>🟠 Balanced</div>
+  <div>🔴 Unsafe</div>
 </div>
 
 <script src="/static/js/app.js"></script>
+
 </body>
 </html>

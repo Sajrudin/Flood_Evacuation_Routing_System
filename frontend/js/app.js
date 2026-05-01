@@ -1,175 +1,219 @@
-// ─────────────────────────────────────────
 // STATE
-// ─────────────────────────────────────────
-let src = null, dst = null;
-let srcMarker, dstMarker, routeLayer;
+
+let src = null,
+  dst = null;
+let srcMarker, dstMarker;
+let routeLayers = {};
 let geocoder;
 
-// ─────────────────────────────────────────
 // MAP SETUP
-// ─────────────────────────────────────────
-const map = L.map("map", { zoomControl: true }).setView([30.32, 78.03], 12);
+
+const map = L.map("map").setView([30.32, 78.03], 12);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution: "© OpenStreetMap contributors"
+  attribution: "© OpenStreetMap contributors",
 }).addTo(map);
 
-map.zoomControl.setPosition("topright");
-
-// Geocoder
 geocoder = L.Control.Geocoder.nominatim();
 
-// ─────────────────────────────────────────
 // ICONS
-// ─────────────────────────────────────────
+
 const srcIcon = L.divIcon({
-  html: '<div style="background:#16a34a;width:18px;height:18px;border-radius:50%;border:3px solid #fff;"></div>',
-  iconSize:[18,18], iconAnchor:[9,9]
+  html: '<div style="background:#16a34a;width:18px;height:18px;border-radius:50%;border:3px solid white;"></div>',
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
 });
 
 const dstIcon = L.divIcon({
-  html: '<div style="background:#dc2626;width:18px;height:18px;border-radius:50%;border:3px solid #fff;"></div>',
-  iconSize:[18,18], iconAnchor:[9,9]
+  html: '<div style="background:#dc2626;width:18px;height:18px;border-radius:50%;border:3px solid white;"></div>',
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
 });
 
-// ─────────────────────────────────────────
+
 // MAP CLICK
-// ─────────────────────────────────────────
-map.on("click", function(e){
+
+map.on("click", (e) => {
   if (!src) setSource(e.latlng, "Selected location");
   else if (!dst) setDest(e.latlng, "Selected location");
 });
 
+// ─────────────────────────────────────────
+// SET SOURCE / DEST
+// ─────────────────────────────────────────
 function setSource(latlng, label) {
   src = latlng;
+
   if (srcMarker) map.removeLayer(srcMarker);
 
   srcMarker = L.marker(latlng, { icon: srcIcon, draggable: true })
     .addTo(map)
-    .bindPopup("📍 Source: " + label);
+    .bindPopup("Source");
 
-  srcMarker.on("dragend", e => src = e.target.getLatLng());
+  srcMarker.on("dragend", (e) => (src = e.target.getLatLng()));
 
   document.getElementById("srcInput").value = label;
-  document.getElementById("srcClear").classList.remove("hidden");
-  closeResults("src");
 }
 
 function setDest(latlng, label) {
   dst = latlng;
+
   if (dstMarker) map.removeLayer(dstMarker);
 
   dstMarker = L.marker(latlng, { icon: dstIcon, draggable: true })
     .addTo(map)
-    .bindPopup("📍 Destination: " + label);
+    .bindPopup("Destination");
 
-  dstMarker.on("dragend", e => dst = e.target.getLatLng());
+  dstMarker.on("dragend", (e) => (dst = e.target.getLatLng()));
 
   document.getElementById("dstInput").value = label;
-  document.getElementById("dstClear").classList.remove("hidden");
-  closeResults("dst");
 }
 
-// ─────────────────────────────────────────
 // AUTOCOMPLETE
-// ─────────────────────────────────────────
+
 let debounceTimer;
 
 function onInput(which) {
-  const input = document.getElementById(which + "Input");
-  const val = input.value.trim();
+  const val = document.getElementById(which + "Input").value;
 
-  if (val.length < 3) { closeResults(which); return; }
+  if (val.length < 3) return;
 
   clearTimeout(debounceTimer);
+
   debounceTimer = setTimeout(() => {
-    geocoder.geocode(val + " Dehradun India", results => {
-      showResults(which, results);
+    geocoder.geocode(val + " Dehradun India", (results) => {
+      const container = document.getElementById(which + "Results");
+      container.innerHTML = "";
+
+      results.slice(0, 5).forEach((r) => {
+        const item = document.createElement("div");
+        item.innerHTML = r.name || r.html;
+
+        item.onclick = () => {
+          if (which === "src") setSource(r.center, r.name);
+          else setDest(r.center, r.name);
+        };
+
+        container.appendChild(item);
+      });
     });
-  }, 350);
-}
-
-function showResults(which, results) {
-  const container = document.getElementById(which + "Results");
-  container.innerHTML = "";
-
-  if (!results || results.length === 0) return;
-
-  results.slice(0, 5).forEach(r => {
-    const item = document.createElement("div");
-    item.className = "autocomplete-item";
-
-    const name = r.name || r.html || "";
-    item.innerHTML = `<span>${name}</span>`;
-
-    item.onclick = () => {
-      const latlng = r.center;
-      if (which === "src") setSource(latlng, name);
-      else setDest(latlng, name);
-    };
-
-    container.appendChild(item);
-  });
-
-  container.classList.add("open");
-}
-
-function closeResults(which) {
-  document.getElementById(which + "Results").classList.remove("open");
+  }, 300);
 }
 
 // ─────────────────────────────────────────
-// ROUTE API CALL
+// FETCH ROUTES
 // ─────────────────────────────────────────
-function findRoute() {
+async function findRoute() {
   if (!src || !dst) {
-    showStatus("error", "⚠️ Please select source and destination.");
+    showStatus("error", "Select source and destination");
     return;
   }
 
   setLoading(true);
 
-  const riskThreshold = parseFloat(document.getElementById("riskThresh").value);
-  const routePref     = document.getElementById("routePref").value;
+  try {
+    const res = await fetch("/route", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        source: [src.lat, src.lng],
+        destination: [dst.lat, dst.lng],
+      }),
+    });
 
-  fetch("route", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      source: [src.lat, src.lng],
-      destination: [dst.lat, dst.lng],
-      risk_threshold: riskThreshold,
-      route_preference: routePref
-    })
-  })
-  .then(res => res.json())
-  .then(data => {
-    setLoading(false);
+    const data = await res.json();
 
     if (data.error) {
       showStatus("error", data.error);
       return;
     }
 
-    if (routeLayer) map.removeLayer(routeLayer);
+    drawRoutes(data);
 
-    routeLayer = L.geoJSON(data, {
-      style: f => ({
-        color: f.properties.risk_score > 0.7 ? "red" : "green",
-        weight: 5
-      }),
-      coordsToLatLng: coords => new L.LatLng(coords[1], coords[0])
+    showStatus("success", "Routes loaded");
+  } catch (err) {
+    console.error(err);
+    showStatus("error", "Server error");
+  }
+
+  setLoading(false);
+}
+
+// ─────────────────────────────────────────
+// DRAW ROUTES
+// ─────────────────────────────────────────
+function drawRoutes(routes) {
+  // Clear old
+  Object.values(routeLayers).forEach((layer) => map.removeLayer(layer));
+  routeLayers = {};
+
+  const colors = {
+    shortest: "blue",
+    safe: "green",
+    balanced: "orange",
+    unsafe: "red",
+  };
+
+  for (let key in routes) {
+    if (
+      !routes[key] ||
+      !routes[key].features ||
+      routes[key].features.length === 0
+    ) {
+      console.warn(key + " route is empty");
+      continue;
+    }
+
+    const layer = L.geoJSON(routes[key], {
+      style: {
+        color: colors[key],
+        weight: key === "safe" ? 6 : 4,
+      },
     }).addTo(map);
 
-    map.fitBounds(routeLayer.getBounds());
+    routeLayers[key] = layer;
+  }
 
-    document.getElementById("sumDist").textContent = data.properties.distance_km + " km";
-    document.getElementById("sumTime").textContent = data.properties.travel_time_min + " min";
-  })
-  .catch(() => {
-    setLoading(false);
-    showStatus("error", "❌ Is FastAPI server running?");
-  });
+  const mainRoute = routeLayers.safe || routeLayers.shortest;
+
+  if (mainRoute) {
+    const bounds = mainRoute.getBounds();
+    if (bounds.isValid()) {
+      map.fitBounds(bounds);
+    }
+  }
+}
+
+// ─────────────────────────────────────────
+// TOGGLE ROUTE
+// ─────────────────────────────────────────
+function toggleRoute(type) {
+  if (!routeLayers[type]) return;
+
+  if (map.hasLayer(routeLayers[type])) {
+    map.removeLayer(routeLayers[type]);
+  } else {
+    routeLayers[type].addTo(map);
+  }
+}
+
+// ─────────────────────────────────────────
+// RESET MAP
+// ─────────────────────────────────────────
+function resetMap() {
+  src = null;
+  dst = null;
+
+  if (srcMarker) map.removeLayer(srcMarker);
+  if (dstMarker) map.removeLayer(dstMarker);
+
+  Object.values(routeLayers).forEach((layer) => map.removeLayer(layer));
+  routeLayers = {};
+
+  document.getElementById("srcInput").value = "";
+  document.getElementById("dstInput").value = "";
 }
 
 // ─────────────────────────────────────────
@@ -178,13 +222,8 @@ function findRoute() {
 function setLoading(on) {
   const btn = document.getElementById("routeBtn");
 
-  if (on) {
-    btn.classList.add("loading");
-    btn.innerHTML = "Loading...";
-  } else {
-    btn.classList.remove("loading");
-    btn.innerHTML = "Find Safe Route";
-  }
+  btn.innerText = on ? "Loading..." : "Find Routes";
+  btn.disabled = on;
 }
 
 function showStatus(type, msg) {
@@ -197,13 +236,13 @@ function showStatus(type, msg) {
 // HEALTH CHECK
 // ─────────────────────────────────────────
 function pingHealth() {
-  fetch("health")
-    .then(() => {
-      document.querySelector(".live-dot").style.background = "#22c55e";
-    })
-    .catch(() => {
-      document.querySelector(".live-dot").style.background = "red";
-    });
+  fetch("/health")
+    .then(
+      () => (document.querySelector(".live-dot").style.background = "green"),
+    )
+    .catch(
+      () => (document.querySelector(".live-dot").style.background = "red"),
+    );
 }
 
 setInterval(pingHealth, 10000);

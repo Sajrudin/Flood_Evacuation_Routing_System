@@ -7,22 +7,20 @@ import osmnx as ox
 import networkx as nx
 
 # ─────────────────────────────────────────────
-# PATH SETUP (IMPORTANT: define first)
+# PATH SETUP
 # ─────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parents[2]
 
 FRONTEND_DIR = BASE_DIR / "frontend"
-GRAPH_PATH   = BASE_DIR / "outputs" / "graph" / "roads_weighted.graphml"
+GRAPH_PATH   = BASE_DIR / "outputs" / "graph" / "roads_ml.graphml"
 
 # ─────────────────────────────────────────────
 # APP SETUP
 # ─────────────────────────────────────────────
 app = FastAPI()
 
-# Serve frontend (CSS, JS)
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
-# Enable CORS (safe for development)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -34,66 +32,170 @@ app.add_middleware(
 # ─────────────────────────────────────────────
 # LOAD GRAPH
 # ─────────────────────────────────────────────
-print("⏳ Loading graph...")
+if GRAPH_PATH.exists():
+    print("📂 Loading graph...")
+    G = ox.load_graphml(str(GRAPH_PATH))
+else:
+    raise FileNotFoundError("Graph not found. Run apply_risk.py first.")
 
-G = ox.load_graphml(str(GRAPH_PATH))
+# Convert to undirected for routing
 G = G.to_undirected()
+print("Sample edge:", list(G.edges(data=True))[0])
 
-print("Graph is directed:", G.is_directed())
 
-# Normalize edge attributes
-for u, v, k, data in G.edges(keys=True, data=True):
+# Normalize attributes (important)
+for u, v, data in G.edges(data=True):
+
+    # length
     try:
-        data["weight"]     = float(data.get("weight", 1.0))
-        data["length"]     = float(data.get("length", 1.0))
+        data["length"] = float(data.get("length", 1.0))
+    except:
+        data["length"] = 1.0
+
+    # risk_score
+    try:
         data["risk_score"] = float(data.get("risk_score", 0.0))
-    except Exception:
-        data["weight"]     = 1.0
-        data["length"]     = 1.0
+    except:
         data["risk_score"] = 0.0
 
+    # blocked
+    data["blocked"] = str(data.get("blocked", "False")) == "True"
+
 print("✅ Graph loaded successfully")
+print("Nodes:", G.number_of_nodes(), "| Edges:", G.number_of_edges())
+
+
+# EDGE WEIGHT FUNCTION (FIXED)
+
+def edge_weight(u, v, d, mode="balanced"):
+
+    length = float(d.get("length", 1))
+    risk = float(d.get("risk_score", 0))
+
+    if mode == "shortest":
+        w = length
+
+    elif mode == "safe":
+        w = length * (1 + risk * 5)
+
+    elif mode == "balanced":
+        w = length * (1 + risk * 2)
+
+    elif mode == "unsafe":
+        w = length * (1 - risk * 0.5)
+
+    else:
+        w = length
+
+    return max(w, 0.1)
+
+
+# MULTI ROUTE FUNCTION
+
+def compute_routes(G, src_node, dst_node):
+
+    routes = {}
+
+    try:
+        print("➡️ Trying SHORTEST")
+        routes["shortest"] = nx.shortest_path(
+            G, src_node, dst_node,
+            weight=lambda u, v, d: edge_weight(u, v, d, "shortest")
+        )
+        print("✅ shortest OK")
+
+    except Exception as e:
+        print("❌ shortest FAILED:", e)
+
+    try:
+        print("➡️ Trying SAFE")
+        routes["safe"] = nx.shortest_path(
+            G, src_node, dst_node,
+            weight=lambda u, v, d: edge_weight(u, v, d, "safe")
+        )
+        print("✅ safe OK")
+
+    except Exception as e:
+        print("❌ safe FAILED:", e)
+
+    try:
+        print("➡️ Trying BALANCED")
+        routes["balanced"] = nx.shortest_path(
+            G, src_node, dst_node,
+            weight=lambda u, v, d: edge_weight(u, v, d, "balanced")
+        )
+        print("✅ balanced OK")
+
+    except Exception as e:
+        print("❌ balanced FAILED:", e)
+
+    try:
+        print("➡️ Trying UNSAFE")
+        routes["unsafe"] = nx.shortest_path(
+            G, src_node, dst_node,
+            weight=lambda u, v, d: edge_weight(u, v, d, "unsafe")
+        )
+        print("✅ unsafe OK")
+
+    except Exception as e:
+        print("❌ unsafe FAILED:", e)
+
+    if len(routes) == 0:
+        return None
+
+    return routes
 
 # ─────────────────────────────────────────────
-# SPEED SETTINGS
+# CONVERT ROUTE → GEOJSON
 # ─────────────────────────────────────────────
-SPEED_SAFE   = 35.0
-SPEED_UNSAFE = 12.0
+def route_to_geojson(G, route):
 
-# ─────────────────────────────────────────────
-# DYNAMIC WEIGHT FUNCTION
-# ─────────────────────────────────────────────
-def make_weight_fn(preference: str, risk_threshold: float):
+    features = []
 
-    def weight_fn(u, v, data: dict) -> float:
-        length     = float(data.get("length", 1.0))
-        risk_score = float(data.get("risk_score", 0.0))
+    for i in range(len(route) - 1):
+        u = route[i]
+        v = route[i + 1]
 
-        if preference == "shorter":
-            return length
+        # 🔥 FIX: check both directions
+        edge_data = G.get_edge_data(u, v) or G.get_edge_data(v, u)
 
-        elif preference == "safer":
-            excess = max(0.0, risk_score - risk_threshold)
-            multiplier = 1.0 + (excess / (1.0 - risk_threshold + 1e-6)) ** 2 * 20.0
-            return length * multiplier
+        if edge_data is None:
+            continue
 
-        else:  # balanced
-            excess = max(0.0, risk_score - risk_threshold)
-            multiplier = 1.0 + (excess / (1.0 - risk_threshold + 1e-6)) * 5.0
-            return length * multiplier
+        # handle dict structure
+        if isinstance(edge_data, dict) and 0 in edge_data:
+            edge = edge_data[0]
+        else:
+            edge = edge_data
 
-    return weight_fn
+        lon1, lat1 = G.nodes[u]["x"], G.nodes[u]["y"]
+        lon2, lat2 = G.nodes[v]["x"], G.nodes[v]["y"]
+
+        features.append({
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [[lon1, lat1], [lon2, lat2]]
+            },
+            "properties": {
+                "risk_score": round(float(edge.get("risk_score", 0)), 3),
+                "blocked": edge.get("blocked", False)
+            }
+        })
+
+    return {
+        "type": "FeatureCollection",
+        "features": features
+    }
 
 # ─────────────────────────────────────────────
 # ROUTES
 # ─────────────────────────────────────────────
 
-# Serve frontend
 @app.get("/")
 def serve_frontend():
     return FileResponse(FRONTEND_DIR / "index.html")
 
-# Health check
 @app.get("/health")
 def health():
     return {
@@ -102,95 +204,33 @@ def health():
         "edges": G.number_of_edges()
     }
 
-# Route API
 @app.post("/route")
 async def route(request: Request):
+
     body = await request.json()
 
-    # Required inputs
-    src_coords = body["source"]
-    dst_coords = body["destination"]
+    src_lat, src_lon = body["source"]
+    dst_lat, dst_lon = body["destination"]
 
-    # Optional inputs
-    risk_threshold = float(body.get("risk_threshold", 0.65))
-    preference     = str(body.get("route_preference", "safer")).lower()
-    
-    if preference not in ("safer", "shorter", "balanced"):
-        preference = "safer"
-
-    risk_threshold = max(0.0, min(1.0, risk_threshold))
-
-    # Snap coordinates
     try:
-        src_node = ox.distance.nearest_nodes(G, src_coords[1], src_coords[0])
-        dst_node = ox.distance.nearest_nodes(G, dst_coords[1], dst_coords[0])
+        src_node = ox.distance.nearest_nodes(G, src_lon, src_lat)
+        dst_node = ox.distance.nearest_nodes(G, dst_lon, dst_lat)
     except Exception:
         return {"error": "Invalid coordinates"}
 
-    print("Source node:", src_node)
-    print("Destination node:", dst_node)
-    print("Neighbors of source:", list(G.neighbors(src_node))[:5])
-    # Compute route
-    weight_fn = make_weight_fn(preference, risk_threshold)
+    # Check connectivity
+    if not nx.has_path(G, src_node, dst_node):
+        print("❌ NO PATH BETWEEN NODES")
+        return {"error": "No route found between selected points"}
 
-    try:
-        path = nx.shortest_path(G, src_node, dst_node, weight=weight_fn)
-    except nx.NetworkXNoPath:
+    routes = compute_routes(G, src_node, dst_node)
+
+    if routes is None:
         return {"error": "No route found"}
-    except nx.NodeNotFound:
-        return {"error": "Point outside road network"}
 
-    # Build response
-    segments        = []
-    total_length_m  = 0.0
-    travel_time_sec = 0.0
-    unsafe_count    = 0
+    response = {}
 
-    for i in range(len(path) - 1):
-        u = path[i]
-        v = path[i + 1]
+    for key, path in routes.items():
+        response[key] = route_to_geojson(G, path)
 
-        edge_data = G.get_edge_data(u, v)
-        edge      = list(edge_data.values())[0]
-
-        length     = float(edge.get("length", 1.0))
-        risk_score = float(edge.get("risk_score", 0.0))
-
-        total_length_m += length
-
-        is_unsafe = risk_score > risk_threshold
-
-        if is_unsafe:
-            unsafe_count += 1
-            travel_time_sec += (length / 1000) / SPEED_UNSAFE * 3600
-        else:
-            travel_time_sec += (length / 1000) / SPEED_SAFE * 3600
-
-        lon1, lat1 = G.nodes[u]["x"], G.nodes[u]["y"]
-        lon2, lat2 = G.nodes[v]["x"], G.nodes[v]["y"]
-
-        segments.append({
-            "type": "Feature",
-            "geometry": {
-                "type": "LineString",
-                "coordinates": [[lon1, lat1], [lon2, lat2]]
-            },
-            "properties": {
-                "unsafe": is_unsafe,
-                "risk_score": round(risk_score, 3),
-                "length_m": round(length, 1)
-            }
-        })
-
-    return {
-        "type": "FeatureCollection",
-        "features": segments,
-        "properties": {
-            "distance_km": round(total_length_m / 1000, 2),
-            "travel_time_min": round(travel_time_sec / 60, 1),
-            "avoided_unsafe": unsafe_count,
-            "total_segments": len(segments),
-            "risk_threshold": risk_threshold,
-            "route_preference": preference
-        }
-    }
+    return response
