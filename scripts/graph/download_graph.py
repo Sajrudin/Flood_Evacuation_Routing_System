@@ -23,7 +23,7 @@ place = "Dehradun, Uttarakhand, India"
 G = ox.graph_from_place(
     place,
     network_type="drive",
-    simplify=True,
+    simplify=False,
     retain_all=True
 )
 
@@ -39,7 +39,7 @@ G = G.subgraph(largest_cc).copy()
 
 # Save original graph
 
-ox.save_graphml(G, str(graph_path))
+ox.save_graphml(G, str(graph_path)) # type: ignore
 print(f"Graph saved at: {graph_path}")
 
 

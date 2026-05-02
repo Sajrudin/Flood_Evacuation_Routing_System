@@ -15,5 +15,6 @@ outputs/rasters/*
 outputs/maps/*.html
 outputs/graph/*.graphml
 
+
 # Optional (only if very large raw data)
-# data/raw/*
+data/raw/waterbodies
